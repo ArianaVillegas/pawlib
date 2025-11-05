@@ -9,6 +9,7 @@ dist/
 build/
 
 # Training outputs
+checkpoints/
 checkpoints_fixed/
 outputs/
 *.pt
@@ -35,4 +36,6 @@ datasets/
 data/
 *.h5
 *.hdf5
-PUBLISHING.md
+
+# Container volumes
+notebooks/

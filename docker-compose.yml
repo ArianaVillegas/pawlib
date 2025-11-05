@@ -1,0 +1,66 @@
+services:
+  pawlib:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pawlib:latest
+    container_name: pawlib
+    
+    # GPU support
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    
+    # Mount volumes
+    volumes:
+      - ./data:/workspace/data              # Your datasets
+      - ./outputs:/workspace/outputs        # Training outputs
+      - ./checkpoints:/workspace/checkpoints # Model checkpoints
+      - ./notebooks:/workspace/notebooks    # Jupyter notebooks (optional)
+    
+    # Keep container running
+    stdin_open: true
+    tty: true
+    
+    # Environment variables
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+    
+    # Working directory
+    working_dir: /workspace
+
+  # Optional: Jupyter notebook server
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pawlib:latest
+    container_name: pawlib-jupyter
+    
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    
+    volumes:
+      - ./data:/workspace/data
+      - ./outputs:/workspace/outputs
+      - ./checkpoints:/workspace/checkpoints
+      - ./notebooks:/workspace/notebooks
+    
+    ports:
+      - "8888:8888"
+    
+    command: >
+      bash -c "pip install jupyter &&
+               jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root"
+    
+    environment:
+      - CUDA_VISIBLE_DEVICES=0

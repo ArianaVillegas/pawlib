@@ -48,6 +48,21 @@ model = PAW()
 print(f"✅ pawlib installed! Model on {model.device}")
 ```
 
+### 🐳 Container Option (Docker/Podman)
+
+For reproducible environments, use containers:
+
+```bash
+# Podman (rootless, no sudo needed)
+./install_podman.sh
+podman-compose -f podman-compose.yml up -d pawlib
+
+# Or Docker
+docker-compose up -d pawlib
+```
+
+See [USAGE.md](USAGE.md) for complete container documentation.
+
 ---
 
 ## 🎯 Quick Start

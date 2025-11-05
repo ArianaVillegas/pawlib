@@ -1,0 +1,51 @@
+# Git
+.git
+.gitignore
+
+# Python cache
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+dist/
+build/
+
+# Training outputs (mount these as volumes)
+checkpoints/
+checkpoints_fixed/
+outputs/
+*.pt
+*.pth
+*.ckpt
+
+# Data (mount as volumes)
+data/
+datasets/
+*.h5
+*.hdf5
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+notebooks/
+
+# Documentation (not needed in container)
+PUBLISHING.md
+*.md
+!README.md
+
+# Other
+train_and_eval.py
+add_ids_to_dataset.py
