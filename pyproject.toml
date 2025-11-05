@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pawlib"
+version = "1.0.0"
+description = "Production-ready PAW seismic waveform analysis library with peak-centered window detection."
+requires-python = ">=3.9"
+authors = [
+  { name = "AFRL Seismology Team" }
+]
+readme = "README.md"
+license = { text = "Proprietary - Internal Use Only" }
+keywords = ["seismology", "waveform", "deep-learning", "phase-detection"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+# Core dependencies
+dependencies = [
+  "torch>=2.0.0",
+  "numpy>=1.23",
+  "h5py>=3.8",
+  "torchmetrics>=0.11",
+  "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# For running training scripts and examples
+dev = [
+    "pandas>=2.0",
+    "matplotlib>=3.7",
+    "scipy>=1.10",
+]
+
+# For advanced features
+lightning = ["lightning>=2.0.0"]
+
+# All optional dependencies
+all = ["pawlib[dev,lightning]"]
+
+[project.urls]
+Repository = "https://github.com/ArianaVillegas/pawlib"
+Documentation = "https://github.com/ArianaVillegas/pawlib/blob/main/README.md"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["pawlib*"]
+exclude = ["tests*"]

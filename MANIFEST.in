@@ -1,0 +1,23 @@
+# Include documentation (for users)
+include README.md
+include LICENSE
+
+# Include examples
+recursive-include examples *.py
+
+# Exclude maintainer files
+exclude PUBLISHING.md
+exclude train_and_eval.py
+exclude add_ids_to_dataset.py
+
+# Exclude build/output directories
+recursive-exclude checkpoints_fixed *
+recursive-exclude outputs *
+
+# Exclude Python artifacts
+global-exclude __pycache__
+global-exclude *.py[cod]
+global-exclude *.so
+
+# Exclude OS files
+global-exclude .DS_Store
