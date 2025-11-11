@@ -27,7 +27,7 @@ dependencies = [
   "torch>=2.0.0",
   "numpy>=1.23",
   "h5py>=3.8",
-  "torchmetrics>=0.11",
+  "torchmetrics>=1.0",  # Updated for numpy 2.x support
   "pyyaml>=6.0",
 ]
 
@@ -35,7 +35,7 @@ dependencies = [
 # For running training scripts and examples
 dev = [
     "pandas>=2.0",
-    "matplotlib>=3.7",
+    "matplotlib>=3.9",  # Updated for numpy 2.x support
     "scipy>=1.10",
 ]
 
