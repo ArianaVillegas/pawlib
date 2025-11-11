@@ -14,6 +14,13 @@ from .config import (
     default_reference_config,
 )
 
+# Optional: SAC file utilities (requires obspy)
+try:
+    from . import sac_utils
+    _has_sac_utils = True
+except ImportError:
+    _has_sac_utils = False
+    
 __all__ = [
     "PAW",
     "losses",
@@ -27,3 +34,6 @@ __all__ = [
     "load_reference_config",
     "default_reference_config",
 ]
+
+if _has_sac_utils:
+    __all__.append("sac_utils")
