@@ -287,12 +287,31 @@ class PAW:
         """Load pretrained model from file.
         
         Args:
-            path: Path to model checkpoint
+            path: Path to model checkpoint. Supports:
+                - Local path: 'checkpoints/model.pt'
+                - Hugging Face: 'hf://username/repo-name/model.pt'
             device: Device to load model on
             
         Returns:
             PAW instance with loaded model
         """
+        if path.startswith('hf://'):
+            from huggingface_hub import hf_hub_download
+            
+            path_parts = path[5:].split('/', 1)
+            if len(path_parts) != 2:
+                raise ValueError(
+                    f"Invalid Hugging Face URL: {path}. "
+                    "Expected format: hf://username/repo-name/filename"
+                )
+            repo_id, filename = path_parts
+            
+            print(f"Downloading model from Hugging Face: {repo_id}/{filename}")
+            local_path = hf_hub_download(repo_id=repo_id, filename=filename)
+            print(f"✓ Downloaded to: {local_path}")
+        else:
+            local_path = path
+        
         # Create instance
         instance = cls(device=device)
         
@@ -300,7 +319,7 @@ class PAW:
         def model_factory():
             return build_paw_copy(device='cpu')
         
-        model, metadata = load_checkpoint(path, model_factory, device=instance.device)
+        model, metadata = load_checkpoint(local_path, model_factory, device=instance.device)
         instance.model = model
         
         print(f"Model loaded from {path}")

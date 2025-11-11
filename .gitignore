@@ -29,7 +29,7 @@ Thumbs.db
 
 # Jupyter
 .ipynb_checkpoints/
-*.ipynb
+# *.ipynb
 
 # Data (don't commit large datasets)
 datasets/
