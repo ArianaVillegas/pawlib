@@ -1,13 +1,13 @@
 # PAWlib
 
-A clean, production-ready PyTorch library for seismic waveform analysis using the PAW (Picker for Arrival of Waves) model.
+A clean, production-ready PyTorch library for seismic phase arrival detection using the PAW model.
 
 **Features:**
-- 🚀 High-level API for training, testing, and inference
-- 📊 Comprehensive metrics (Window Accuracy, Dice Score, RMSE)
-- 🔧 Configurable loss functions (Dice, BCE, AmpPer)
-- 💾 Model checkpointing and loading
-- 🎨 Automatic visualization generation
+- 🚀 High-level API for training and inference
+- 📁 SAC file loading with ObsPy integration
+- 🔧 Preprocessing utilities (filter, resample, normalize)
+- 📊 Comprehensive metrics and loss functions
+- 💾 Hugging Face Hub integration for pretrained models
 
 ## 📦 Installation
 
@@ -67,162 +67,102 @@ See [USAGE.md](USAGE.md) for complete container documentation.
 
 ## 🎯 Quick Start
 
-### Basic Usage
+### Inference with Pretrained Model
 
 ```python
-from pawlib import PAW
+from pawlib import PAW, load_sac_waveform, preprocess_for_paw, extract_windows_from_prediction
 import numpy as np
 
-# Create model
-model = PAW()
+# Load SAC file
+waveform, meta = load_sac_waveform('signal.sac', onset_time=10.5, window_duration=5.0)
 
-# Train on your data
-history = model.train(
-    data='your_dataset.h5',  # or numpy array
-    epochs=100,
-    batch_size=64,
-    loss='dice'
-)
+# Preprocess
+waveform = preprocess_for_paw(waveform, meta['sampling_rate'], target_freq=40.0)
+waveform = np.pad(waveform, ((0,0), (20,20), (0,0)))  # Add model padding
 
-# Make predictions
-predictions = model.predict(test_data)
+# Load model and predict
+model = PAW.from_pretrained('hf://suroRitch/pawlib-pretrained/paw_corrected.pt')
+prediction = model.predict(waveform[:, 20:-20, :])
+windows = extract_windows_from_prediction(prediction)
 
-# Evaluate
-results = model.test(test_data, test_labels)
+print(f"Detected window: {windows[0]} samples")
 ```
-
-## 💡 API Reference
 
 ### Training
 
 ```python
+# Train on your data
 model = PAW()
-
-# Train from HDF5 file
-history = model.train(
-    data='dataset.h5',
-    epochs=100,
-    batch_size=64,
-    loss='dice',  # Options: 'dice', 'bce', 'amper', 'bce_dice'
-    checkpoint_dir='my_checkpoints'  # Optional
-)
-
-# Or train from numpy arrays
-data = np.random.randn(1000, 200, 1).astype(np.float32)
-labels = np.array([[0.5, 1.0]] * 1000)  # [start, end] in seconds
-history = model.train(data, labels, epochs=50)
-```
-
-### Inference
-
-```python
-# Make predictions
-predictions = model.predict(waveforms)
-# Returns: binary masks (N, 1, 240)
-
-# Evaluate on test set
-results = model.test(test_waveforms, test_labels)
-print(f"Accuracy: {results['window_accuracy']:.2%}")
-```
-
-### Save & Load
-
-```python
-# Save trained model
+history = model.train(data='dataset.h5', epochs=100, batch_size=64, loss='dice')
 model.save('my_model.pt')
-
-# Load model
-model = PAW.load('my_model.pt')
 ```
 
----
+## 💡 API Reference
 
-## 🔧 Configuration
-
-### Loss Functions
-
-- **`dice`** (recommended) - Combines BCE + Dice + Temporal Consistency
-- **`bce`** - Binary Cross Entropy
-- **`amper`** - Amplitude-Period loss
-- **`bce_dice`** - Combined BCE and Dice
-
-### Training Parameters
+### SAC File Loading
 
 ```python
-model.train(
-    data='dataset.h5',
-    epochs=100,           # Number of training epochs
-    batch_size=64,        # Batch size
-    loss='dice',          # Loss function
-    lr=1e-3,             # Learning rate
-    val_split=0.2,       # Validation split ratio
-    checkpoint_dir='checkpoints',  # Save directory
-    save_best=True,      # Save best model
-    verbose=True         # Print progress
-)
+from pawlib import load_sac_waveform, batch_load_sac_files
+
+# Load single file
+waveform, meta = load_sac_waveform('signal.sac', onset_time=10.5, window_duration=5.0, padding=0.5)
+
+# Batch load
+files = ['event1.sac', 'event2.sac', 'event3.sac']
+onsets = [10.5, 15.2, 8.7]
+waveforms, metadata = batch_load_sac_files(files, onsets)
+```
+
+### Preprocessing
+
+```python
+from pawlib import preprocess_for_paw, normalize_waveform, filter_waveform, resample_waveform
+
+# Complete pipeline
+waveform = preprocess_for_paw(waveform, sampling_rate=20.0, target_freq=40.0, 
+                               freqmin=1.0, freqmax=15.0)
+
+# Individual operations
+waveform = filter_waveform(waveform, sampling_rate=20.0, freqmin=1.0, freqmax=15.0)
+waveform = resample_waveform(waveform, original_freq=20.0, target_freq=40.0)
+waveform = normalize_waveform(waveform, method='max')
+```
+
+### Model Operations
+
+```python
+# Load pretrained
+model = PAW.from_pretrained('hf://suroRitch/pawlib-pretrained/paw_corrected.pt')
+
+# Inference
+predictions = model.predict(waveforms)  # Returns: (N, 1, T)
+windows = extract_windows_from_prediction(predictions)  # Returns: (N, 2)
+
+# Training
+model = PAW()
+history = model.train(data='dataset.h5', epochs=100, loss='dice')
+model.save('my_model.pt')
 ```
 
 ---
-
-## 📊 Metrics
-
-The library automatically computes:
-
-- **Window Accuracy** - Exact window boundary matching
-- **Dice Score** - Overlap between predicted and true masks
-- **Amplitude RMSE** - Amplitude prediction error
-- **Period RMSE** - Period prediction error
-- **Magnitude RMSE** - Magnitude prediction error
-- **Window RMSE** - Window boundary error
-
-All metrics are returned as a dictionary from `model.test()`
 
 ## 📝 Data Format
 
-### Input Data
+**Waveforms:** `(N, T, 1)` shape - typically `(N, 200, 1)` at 40 Hz  
+**Labels:** `(N, 2)` - `[start_time, end_time]` in seconds  
+**Model expects:** 20 samples padding on each side (use `np.pad`)
 
-**Waveforms:**
-- Shape: `(N, T, C)` where N=samples, T=timesteps, C=channels
-- Type: numpy array or HDF5 file with 'waveforms' dataset
-- Typical: `(N, 200, 1)` for single-channel data
-
-**Labels:**
-- Shape: `(N, 2)` with `[start_time, end_time]` in seconds
-- Type: numpy array or HDF5 file with 'labels' dataset
-- Example: `[[0.5, 1.0], [1.2, 1.7], ...]`
-
-### Model Architecture
-
-- **Type**: CNN + LSTM + Transformer hybrid
-- **Input**: Waveform sequences (automatically padded)
-- **Output**: Binary masks indicating phase windows
-- **Sampling**: 40 Hz (0.025s per sample)
+**Loss functions:** `'dice'`, `'bce'`, `'amper'`, `'bce_dice'`  
+**Metrics:** Window Accuracy, Dice Score, RMSE (amplitude, period, window)
 
 ## 📚 Examples
 
-See the `examples/` directory for complete working examples:
-
-- **`quick_start.py`** - Basic training and inference
-- **`high_level_api.py`** - Advanced usage patterns
-
+- **`inference_demo.ipynb`** - Complete inference workflow with SAC files
+- **`examples/quick_start.py`** - Basic training and inference
+- **`examples/high_level_api.py`** - Advanced usage patterns
 
 ## 🐛 Troubleshooting
 
-### Import Error
-```bash
-# Check installation
-pip list | grep pawlib
-
-# Reinstall
-pip uninstall pawlib
-pip install git+ssh://git@github.com/ArianaVillegas/pawlib.git
-```
-
-### CUDA/GPU Issues
-```bash
-# Check CUDA availability
-python -c "import torch; print(torch.cuda.is_available())"
-
-# Reinstall PyTorch with CUDA
-pip install torch --index-url https://download.pytorch.org/whl/cu118
-```
+**Import errors:** `pip uninstall pawlib && pip install git+ssh://git@github.com/ArianaVillegas/pawlib.git`  
+**GPU issues:** Check with `python -c "import torch; print(torch.cuda.is_available())"`  
+**ObsPy required:** Install with `pip install obspy` for SAC file support

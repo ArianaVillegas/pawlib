@@ -17,9 +17,25 @@ from .config import (
 # Optional: SAC file utilities (requires obspy)
 try:
     from . import sac_utils
+    from .sac_utils import load_sac_waveform, load_obspy_example_sac
     _has_sac_utils = True
 except ImportError:
     _has_sac_utils = False
+
+# Optional: Preprocessing utilities (requires scipy and optionally obspy)
+try:
+    from . import preprocessing_utils
+    from .preprocessing_utils import (
+        detrend_waveform,
+        filter_waveform,
+        resample_waveform,
+        normalize_waveform,
+        preprocess_for_paw,
+        extract_windows_from_prediction
+    )
+    _has_preprocessing_utils = True
+except ImportError:
+    _has_preprocessing_utils = False
     
 __all__ = [
     "PAW",

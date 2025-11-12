@@ -298,7 +298,7 @@ class PAW:
         if path.startswith('hf://'):
             from huggingface_hub import hf_hub_download
             
-            path_parts = path[5:].split('/', 1)
+            path_parts = path[5:].rsplit('/', 1)
             if len(path_parts) != 2:
                 raise ValueError(
                     f"Invalid Hugging Face URL: {path}. "
