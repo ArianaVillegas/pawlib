@@ -29,6 +29,7 @@ dependencies = [
   "h5py>=3.8",
   "torchmetrics>=1.0",  # Updated for numpy 2.x support
   "pyyaml>=6.0",
+  "huggingface-hub>=0.16",  # For model downloading from HuggingFace
 ]
 
 [project.optional-dependencies]
@@ -37,6 +38,7 @@ dev = [
     "pandas>=2.0",
     "matplotlib>=3.9",  # Updated for numpy 2.x support
     "scipy>=1.10",
+    "obspy>=1.4.0",  # For SAC file loading
 ]
 
 # For advanced features
