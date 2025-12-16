@@ -152,11 +152,13 @@ def extract_windows_from_prediction(
     prediction: np.ndarray,
     threshold: float = 0.5
 ) -> np.ndarray:
-    """Extract window boundaries from PAW prediction mask.
+    """Extract window boundaries from PAW prediction using peak-based approach.
+    
+    Finds the highest prediction peak and expands left/right until values drop below threshold.
     
     Args:
         prediction: Model prediction, shape (N, C, T) or (N, T)
-        threshold: Threshold for binary mask (default: 0.5)
+        threshold: Threshold to stop expansion (default: 0.5)
         
     Returns:
         windows: Array of shape (N, 2) with [start_idx, end_idx] for each sample
@@ -171,12 +173,28 @@ def extract_windows_from_prediction(
     windows = np.zeros((batch_size, 2), dtype=np.int32)
     
     for i in range(batch_size):
-        binary_mask = (pred[i] > threshold).astype(int)
-        activated = np.where(binary_mask > 0)[0]
+        signal = pred[i]
         
-        if len(activated) > 0:
-            windows[i, 0] = activated[0]
-            windows[i, 1] = activated[-1]
+        # Find the peak (highest value)
+        peak_idx = np.argmax(signal)
+        peak_value = signal[peak_idx]
+        
+        # Skip if peak is below threshold
+        if peak_value < threshold:
+            continue
+        
+        # Expand left from peak until below threshold
+        start_idx = peak_idx
+        while start_idx > 0 and signal[start_idx - 1] >= threshold:
+            start_idx -= 1
+        
+        # Expand right from peak until below threshold  
+        end_idx = peak_idx
+        while end_idx < len(signal) - 1 and signal[end_idx + 1] >= threshold:
+            end_idx += 1
+            
+        windows[i, 0] = start_idx
+        windows[i, 1] = end_idx
     
     return windows
 
