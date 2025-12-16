@@ -16,11 +16,10 @@ COPY pyproject.toml README.md LICENSE ./
 COPY src/ ./src/
 COPY examples/ ./examples/
 
-# Install pawlib and dependencies
-RUN pip install --no-cache-dir -e .
-
-# Install optional dependencies for examples
-RUN pip install --no-cache-dir -e ".[dev]"
+# Install pawlib with all dependencies in single layer
+RUN pip install --no-cache-dir -e ".[dev]" && \
+    pip cache purge && \
+    rm -rf /tmp/*
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
