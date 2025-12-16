@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 from pawlib import (
     PAW,
-    batch_load_sac_files,
+    load_sac_waveform,
     preprocess_for_paw,
     extract_windows_from_prediction
 )
@@ -49,7 +49,6 @@ def main():
         
         try:
             # Load and preprocess
-            from pawlib import load_sac_waveform
             waveform, meta = load_sac_waveform(
                 str(sac_file),
                 onset_time=None,  # Will try to read from SAC header

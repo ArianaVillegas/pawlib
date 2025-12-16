@@ -1,570 +1,503 @@
-# PAWlib
+# PAWlib 
 
-A clean, production-ready PyTorch library for seismic phase arrival detection using the PAW model.
+**Seismic amplitude window prediction using deep learning**
 
-**Features:**
-- 🚀 High-level API for training and inference
-- 📁 SAC file loading with ObsPy integration
-- 🔧 Preprocessing utilities (filter, resample, normalize)
-- 📊 Comprehensive metrics and loss functions
-- 💾 Hugging Face Hub integration for pretrained models
+PAWlib uses the PAW (Predicting Amplitude Windows) deep learning model to predict amplitude windows in seismic waveforms. The library works with standard seismic data formats like SAC files and provides both container-based and Python library interfaces.
 
-**Table of Contents:**
-- [Quick Start (5 minutes)](#-quick-start-5-minutes)
-- [Docker/Podman Usage](#-dockerpodman-usage)
-- [Jupyter Notebook Examples](#-jupyter-notebook-examples)
-- [Installation](#-installation)
-- [Python Usage Examples](#-python-usage-examples)
-- [Advanced Training & Testing](#-advanced-training--testing)
-- [API Reference](#-api-reference)
-- [Common Issues](#-common-issues)
+## What You Can Do
 
-## 🎯 Quick Start (5 minutes)
+### 1. **🔍 Prediction** (Most Common Use)
+   - **Container approach**: Analyze SAC files with no Python setup required
+   - **Python library**: Integrate predictions into your existing workflows
 
-### Option 1: Using Docker/Podman (No installation needed)
+### 2. **🎓 Advanced Training & Testing**
+   - **Data preparation**: Create training datasets from your seismic data
+   - **Container training**: Train models without managing Python environments
+   - **Python training**: Full control over model development and testing
 
+---
+
+## 📋 Table of Contents
+
+- [1. Prediction](#1-prediction)
+  - [Container (Docker/Podman)](#container-dockerpodman)
+  - [Python Library](#python-library)
+- [2. Advanced Training & Testing](#2-advanced-training--testing)
+  - [Data Preparation](#data-preparation)
+  - [Python Training](#python-training)
+- [Troubleshooting](#troubleshooting)
+
+# 1. Prediction
+
+## Container (Docker/Podman)
+
+**Use this approach if:** You just want to analyze SAC files with no Python setup required.
+
+### Setup (One-time)
 ```bash
-# 1. Clone the repository
+# Get PAWlib
 git clone git@github.com:ArianaVillegas/pawlib.git
 cd pawlib
 
-# 2. Download sample seismic data
-mkdir -p data/sample_sac
-curl -o data/sample_sac/COP_BHZ_DK.sac https://examples.obspy.org/COP.BHZ.DK.2009.050
-# Or if you have obspy: python examples/download_sample_sac.py
-
-# 3. Build container image
-podman build -t pawlib:latest .
-
-# 4. Run prediction with visualization
-mkdir -p outputs
-podman run --rm \
-  -v $(pwd)/data/sample_sac:/data:Z \
-  -v $(pwd)/outputs:/output:Z \
-  pawlib:latest python examples/docker_predict.py /data/COP_BHZ_DK.sac 200.0 /output/result.png
-
-# 5. View the result
-open outputs/result.png  # or xdg-open on Linux
-```
-
-### Option 2: Local Installation
-
-```bash
-# Install with dev dependencies
-pip install "pawlib[dev] @ git+ssh://git@github.com/ArianaVillegas/pawlib.git"
-
-# Run inference
-python examples/quick_start.py
-```
-
-## 📦 Installation
-
-### From Private GitHub (Recommended)
-
-```bash
-# Install latest version
-pip install git+ssh://git@github.com/ArianaVillegas/pawlib.git
-
-# Or specific version
-pip install git+ssh://git@github.com/ArianaVillegas/pawlib.git@v1.0.0
-
-# With optional dependencies for development
-pip install "pawlib[dev] @ git+ssh://git@github.com/ArianaVillegas/pawlib.git"
-```
-
-### From Source (Development)
-
-```bash
-# Clone and install
-git clone git@github.com:ArianaVillegas/pawlib.git
-cd pawlib
-pip install -e ".[dev]"
-```
-
-### Requirements
-
-- **Python:** 3.9+
-- **PyTorch:** 2.0.0+ (with CUDA for GPU)
-- **Core dependencies:** torch, numpy, h5py, torchmetrics, pyyaml (auto-installed)
-- **Optional:** pandas, matplotlib, scipy (install with `[dev]`)
-
-### Verify Installation
-
-```python
-from pawlib import PAW
-model = PAW()
-print(f"✅ pawlib installed! Model on {model.device}")
-```
-
-## 🐳 Docker/Podman Usage
-
-### Build Container Image
-```bash
-# Clone repository and build
-git clone git@github.com:ArianaVillegas/pawlib.git
-cd pawlib
+# Build container
 podman build -t pawlib:latest .
 ```
 
-### Basic Prediction with Visualization
+### Analyze Single SAC File
 ```bash
-# Download sample data
-mkdir -p data/sample_sac outputs
-curl -o data/sample_sac/COP_BHZ_DK.sac https://examples.obspy.org/COP.BHZ.DK.2009.050
+# Prepare directories
+mkdir -p data outputs
 
-# Run prediction with automatic half-cycle cropping
+# Get sample data (or use your own SAC file)
+curl -o data/sample.sac https://examples.obspy.org/COP.BHZ.DK.2009.050
+
+# Run prediction (onset_time in seconds)
 podman run --rm \
-  -v $(pwd)/data/sample_sac:/data:Z \
+  -v $(pwd)/data:/data:Z \
   -v $(pwd)/outputs:/output:Z \
-  pawlib:latest python examples/docker_predict.py /data/COP_BHZ_DK.sac 200.0 /output/result.png
+  pawlib:latest python examples/docker_predict.py /data/sample.sac 10.5 /output/result.png
 
 # View results
-open outputs/result.png  # or xdg-open on Linux
+open outputs/result.png
 ```
 
-### GPU-Accelerated Processing
+### Batch Process Multiple SAC Files
 ```bash
-# With GPU support for faster inference
+# Process all SAC files in a directory
+podman run --rm \
+  -v $(pwd)/data:/data:Z \
+  -v $(pwd)/outputs:/output:Z \
+  pawlib:latest python examples/docker_batch_predict.py /data /output/results.csv
+
+# Results saved to CSV with timing data for each file
+```
+
+### GPU Acceleration (Optional)
+```bash
+# Enable GPU support for faster processing
 podman run --rm --device nvidia.com/gpu=all \
-  -v /path/to/your/sac/files:/data:Z \
+  -v $(pwd)/data:/data:Z \
   -v $(pwd)/outputs:/output:Z \
   pawlib:latest python examples/docker_predict.py /data/your_file.sac 10.5 /output/result.png
 ```
 
-### Batch Processing
+## Python Library
+
+**Use this approach if:** You want to integrate PAWlib into existing Python code or workflows.
+
+### Setup with Conda Environment (Recommended)
 ```bash
-# Process all SAC files in a directory
-podman run --rm \
-  -v /path/to/sac/files:/data:Z \
-  -v $(pwd)/outputs:/output:Z \
-  pawlib:latest python examples/docker_batch_predict.py /data /output/results.csv
+# Create dedicated environment
+conda create -n pawlib python=3.10 pytorch torchvision pytorch-cuda=11.8 -c pytorch -c nvidia
+conda activate pawlib
+
+# Install scientific packages
+conda install numpy scipy h5py pyyaml torchmetrics pandas matplotlib obspy -c conda-forge
+
+# Install PAWlib
+pip install git+ssh://git@github.com/ArianaVillegas/pawlib.git
+
+# Verify installation
+python -c "from pawlib import PAW; print('✅ PAWlib ready!')"
 ```
 
-### Docker Alternative
-```bash
-# Using Docker instead of Podman
-docker run --rm --gpus all \
-  -v /path/to/your/sac/files:/data \
-  -v $(pwd)/outputs:/output \
-  pawlib:latest python examples/docker_predict.py /data/signal.sac 10.5 /output/result.png
-```
-
-## 📓 Jupyter Notebook Examples
-
-### Interactive Demo Notebook
-The `inference_demo.ipynb` provides a complete interactive workflow:
-
-```bash
-# Start Jupyter in the container
-podman run --rm -p 8888:8888 \
-  -v $(pwd):/workspace:Z \
-  pawlib:latest jupyter notebook --ip=0.0.0.0 --no-browser --allow-root
-
-# Or run locally after installation
-jupyter notebook inference_demo.ipynb
-```
-
-### Getting Both Predictions and Windows:
-```python
-# New feature: Get both raw predictions and refined windows
-refined_windows, predictions = model.predict_windows(
-    waveform[:, 20:-20, :], 
-    return_predictions=True
-)
-
-# predictions: Raw model activations (N, C, T) 
-# refined_windows: Half-cycle cropped boundaries (N, 2)
-```
-
----
-
-## � Data Requirements & Preprocessing
-
-**Important**: PAW models have specific data requirements. 
-
-### Required Data Format
-- **Sampling Rate**: 40 Hz (model requirement)
-- **Window Duration**: 5 seconds (200 samples at 40 Hz)
-- **Shape**: `(N, T, C)` where N=batch, T=time samples, C=channels
-- **Padding**: 20 samples on each side (handled automatically by model)
-- **Preprocessing**: Detrend → Filter (1-15 Hz) → Resample → Normalize
-
-### Docker Users (SAC Files): ✅ **Preprocessing Handled Automatically**
-When using Docker with SAC files, **all preprocessing is done automatically**:
-```bash
-# Docker automatically handles: detrend, filter, resample, normalize
-podman run --rm \
-  -v $(pwd)/data:/data:Z \
-  -v $(pwd)/outputs:/output:Z \
-  pawlib:latest python examples/docker_predict.py /data/signal.sac 10.5 /output/result.png
-```
-
-### Python Users: Manual Preprocessing Required
-
-```python
-from pawlib import preprocess_for_paw, load_sac_waveform
-import numpy as np
-
-# 1. Load SAC file with proper windowing
-waveform, meta = load_sac_waveform('signal.sac', onset_time=10.5)
-
-# 2. Apply required preprocessing pipeline
-waveform = preprocess_for_paw(
-    waveform, 
-    sampling_rate=meta['sampling_rate'],  # Original rate (e.g., 20 Hz)
-    target_freq=40.0,                     # Required: 40 Hz
-    freqmin=1.0,                         # Required: 1-15 Hz filter
-    freqmax=15.0
-)
-
-# 3. Add required padding
-waveform = np.pad(waveform, ((0,0), (20,20), (0,0)), mode='constant')
-
-# 4. Ready for model inference
-model = PAW.from_pretrained('hf://suroRitch/pawlib-pretrained/paw_corrected.pt')
-windows = model.predict_windows(waveform[:, 20:-20, :])
-```
-
-### Individual Preprocessing Steps
-```python
-from pawlib import filter_waveform, resample_waveform, normalize_waveform
-
-# Step-by-step preprocessing for custom workflows
-waveform = filter_waveform(waveform, sampling_rate=20.0, freqmin=1.0, freqmax=15.0)
-waveform = resample_waveform(waveform, original_freq=20.0, target_freq=40.0)
-waveform = normalize_waveform(waveform, method='max')
-```
-
----
-
-## �🔍 Python Usage Examples
-
-### Single SAC File Prediction with Half-Cycle Cropping
-
+### Basic Prediction Example
 ```python
 from pawlib import PAW, load_sac_waveform, preprocess_for_paw
 import numpy as np
 
-# 1. Load SAC file (5-second window around onset)
-waveform, meta = load_sac_waveform('signal.sac', onset_time=10.5)
-
-# 2. Preprocess to PAW format (40 Hz)
+# Load and preprocess SAC file
+waveform, meta = load_sac_waveform('earthquake.sac', onset_time=10.5)
 waveform = preprocess_for_paw(waveform, meta['sampling_rate'])
 waveform = np.pad(waveform, ((0,0), (20,20), (0,0)))  # Required padding
 
-# 3. Run inference with automatic half-cycle cropping
+# Load model and predict
 model = PAW.from_pretrained('hf://suroRitch/pawlib-pretrained/paw_corrected.pt')
 windows = model.predict_windows(waveform[:, 20:-20, :])
 
-# 4. Get results
-start_time = windows[0, 0] / 40.0  # Convert to seconds  
+# Get results in seconds
+start_time = windows[0, 0] / 40.0  
 end_time = windows[0, 1] / 40.0
-print(f"Detected half-cycle window: {start_time:.3f}s - {end_time:.3f}s")
-print(f"Duration: {end_time - start_time:.3f}s")
+print(f"Predicted amplitude window: {start_time:.3f}s - {end_time:.3f}s")
 ```
 
-### Getting Raw Predictions + Windows
-
+### Batch Processing Example
 ```python
-# Get both model activations and refined windows
-windows, predictions = model.predict_windows(
-    waveform[:, 20:-20, :],
-    return_predictions=True
-)
+from pawlib import PAW, load_sac_waveform, preprocess_for_paw
+import numpy as np
+import pandas as pd
 
-# predictions: Raw PAW activations (N, C, T) for visualization
-# windows: Half-cycle cropped boundaries (N, 2) for analysis
+# Load model once
+model = PAW.from_pretrained('hf://suroRitch/pawlib-pretrained/paw_corrected.pt')
+
+# Process multiple files
+files = ['event1.sac', 'event2.sac', 'event3.sac']
+onset_times = [10.5, 15.2, 8.7]
+results = []
+
+for filename, onset_time in zip(files, onset_times):
+    # Load and preprocess each file
+    waveform, meta = load_sac_waveform(filename, onset_time=onset_time)
+    waveform = preprocess_for_paw(waveform, meta['sampling_rate'])
+    waveform = np.pad(waveform, ((0,0), (20,20), (0,0)))
+    
+    # Predict amplitude windows directly
+    windows = model.predict_windows(waveform[:, 20:-20, :])
+    
+    # Store results
+    results.append({
+        'filename': filename,
+        'start_time': windows[0, 0] / 40.0,
+        'end_time': windows[0, 1] / 40.0,
+        'duration': (windows[0, 1] - windows[0, 0]) / 40.0
+    })
+
+# Save to CSV
+pd.DataFrame(results).to_csv('predictions.csv', index=False)
 ```
 
-## 🎓 Advanced Training & Testing
+# 2. Advanced Training & Testing
 
-### Training Your Own Model
+## Data Preparation
 
-```python
-from pawlib import PAW
+**Prepare your seismic data for training custom PAW models.**
 
-# Initialize model with custom architecture
-model = PAW(
-    device='cuda',  # or 'cpu'
-    architecture='paw_reference',  # Model architecture
-)
-
-# Train with HDF5 dataset
-history = model.train(
-    data='dataset.h5',        # HDF5 file with 'waveforms' and 'labels'  
-    epochs=100,
-    batch_size=64,
-    loss='dice',              # Options: 'dice', 'bce', 'amper', 'bce_dice'
-    learning_rate=0.001,
-    validation_split=0.2,
-    early_stopping=True,
-    patience=10
-)
-
-# Save trained model
-model.save('my_model.pt', metadata={'version': '1.0', 'dataset': 'custom'})
-```
-
-### Custom Dataset Preparation
+### HDF5 Dataset Format
+PAWlib requires training data in HDF5 format with specific structure:
 
 ```python
 import h5py
 import numpy as np
 
-# Create HDF5 dataset for training
-with h5py.File('dataset.h5', 'w') as f:
-    # Waveforms: (N, 200, 1) at 40 Hz, 5-second windows
-    f.create_dataset('waveforms', data=waveforms)  
+# Create training dataset from your seismic data
+with h5py.File('my_training_data.h5', 'w') as f:
+    # Waveforms: (N, 200, 1) - N traces, 200 samples at 40Hz, 1 channel
+    f.create_dataset('waveforms', data=your_waveforms)
     
-    # Labels: (N, 2) with [start_time, end_time] in seconds
-    f.create_dataset('labels', data=labels)
+    # Labels: (N, 2) - [start_time, end_time] in seconds for each trace
+    f.create_dataset('labels', data=your_labels)
     
     # Optional metadata
     f.attrs['sampling_rate'] = 40.0
     f.attrs['window_duration'] = 5.0
+    f.attrs['description'] = 'My earthquake dataset'
 ```
 
-### Model Evaluation & Testing
+### Data Requirements
+- **Waveforms**: Shape `(N, 200, 1)` at 40 Hz sampling rate
+- **Labels**: Shape `(N, 2)` with `[start_time, end_time]` in seconds
+- **Preprocessing**: Data must be filtered (1-15 Hz), normalized, and resampled to 40 Hz
 
+### Preprocessing Your Data
 ```python
-# Comprehensive model testing
+from pawlib import preprocess_for_paw
+
+# Example: preparing raw seismic traces
+for i, raw_trace in enumerate(your_raw_traces):
+    # Preprocess to PAW requirements (all parameters are optional with good defaults)
+    processed = preprocess_for_paw(
+        raw_trace, 
+        sampling_rate=original_sampling_rate,
+        target_freq=40.0,  # Default is 40.0 
+        freqmin=1.0,       # Default is 1.0
+        freqmax=15.0       # Default is 15.0
+    )
+    your_waveforms[i] = processed
+```
+
+## Python Training
+
+**Use this approach if:** You want full control over model training and testing in Python.
+
+### Environment Setup
+```bash
+# Create conda environment with all dependencies
+conda create -n pawlib-train python=3.10 pytorch torchvision pytorch-cuda=11.8 -c pytorch -c nvidia
+conda activate pawlib-train
+conda install numpy scipy h5py pyyaml torchmetrics pandas matplotlib obspy -c conda-forge
+
+# Install PAWlib in development mode
+git clone git@github.com:ArianaVillegas/pawlib.git
+cd pawlib
+pip install -e ".[dev]"
+```
+
+### Training a Model
+```python
+from pawlib import PAW
+
+# Initialize model for training
+model = PAW(device='cuda')  # Use 'cpu' if no GPU available
+
+# Train on your prepared HDF5 dataset
+history = model.train(
+    data='my_training_data.h5',     # Your prepared dataset
+    epochs=100,                     # Adjust based on dataset size
+    batch_size=64,                  # Adjust based on GPU memory
+    loss='dice',                    # Good default for seismic detection
+    lr=0.001,                       # Learning rate
+    val_split=0.2,                  # Use 20% of data for validation
+    save_best=True,                 # Save best model during training
+    verbose=True                    # Show training progress
+)
+
+# Save your trained model
+model.save('my_custom_paw_model.pt', metadata={
+    'version': '1.0',
+    'dataset': 'my_earthquake_data',
+    'description': 'Custom PAW model for local seismicity'
+})
+
+print("✅ Training complete!")
+```
+
+### Testing a Model
+```python
+# Load your trained model
+model = PAW.from_pretrained('my_custom_paw_model.pt')
+
+# Test on held-out data
 test_results = model.test(
     data='test_dataset.h5',
-    batch_size=32,
-    apply_half_cycle_cropping=True
+    batch_size=32
 )
 
-print(f"Window Accuracy: {test_results['window_accuracy']:.4f}")
-print(f"Amplitude RMSE: {test_results['amplitude_rmse']:.4f}")
-print(f"Period RMSE: {test_results['period_rmse']:.4f}")
-print(f"Dice Score: {test_results['dice_score']:.4f}")
-
-# Test on specific subsets
-subset_results = model.test_subsets(
-    data='test_dataset.h5',
-    subsets={
-        'high_snr': [0, 100, 200],      # Sample indices
-        'low_snr': [101, 201, 301],
-        'complex': [500, 600, 700]
-    }
-)
+# View performance metrics
+print(f"📊 Model Performance:")
+print(f"   Window Accuracy: {test_results['window_accuracy']:.2%}")
+print(f"   Dice Score: {test_results['dice_score']:.3f}")
+print(f"   Average Error: {test_results['amplitude_rmse']:.3f}s")
 ```
 
 ### Advanced Training Options
-
 ```python
-# Custom loss functions and metrics
-from pawlib.losses import BCEDiceLoss, AmpPerLoss
-from pawlib.metrics import WindowAccuracy, AmplitudeRMSE
-
-model = PAW()
-
-# Multi-loss training with custom weights
+# Available loss functions
 history = model.train(
     data='dataset.h5',
     epochs=100,
-    loss={
-        'dice': 0.7,        # 70% Dice loss weight
-        'bce': 0.2,         # 20% BCE loss weight  
-        'amper': 0.1        # 10% Amplitude-Period loss weight
-    },
-    scheduler='cosine',     # Learning rate scheduling
-    warmup_epochs=10,
-    gradient_clipping=1.0
-)
-```
-
-### Distributed Training
-
-```python
-# Multi-GPU training
-import torch.distributed as dist
-
-# Initialize distributed training
-model = PAW(device='cuda')
-
-# Train with DataParallel or DistributedDataParallel
-history = model.train(
-    data='large_dataset.h5',
-    epochs=200,
-    batch_size=128,
-    distributed=True,
-    world_size=4,           # Number of GPUs
-    rank=0                  # Current GPU rank
-)
-```
-
-### Hyperparameter Tuning
-
-```python
-from itertools import product
-
-# Grid search over hyperparameters
-param_grid = {
-    'learning_rate': [0.01, 0.001, 0.0001],
-    'batch_size': [32, 64, 128],
-    'loss': ['dice', 'bce_dice'],
-}
-
-best_score = 0
-best_params = {}
-
-for lr, bs, loss in product(*param_grid.values()):
-    model = PAW()
-    history = model.train(
-        data='train_dataset.h5',
-        validation_data='val_dataset.h5',
-        epochs=50,
-        learning_rate=lr,
-        batch_size=bs,
-        loss=loss,
-        verbose=False
-    )
-    
-    val_score = max(history['val_dice_score'])
-    if val_score > best_score:
-        best_score = val_score
-        best_params = {'lr': lr, 'batch_size': bs, 'loss': loss}
-        model.save(f'best_model_{val_score:.4f}.pt')
-
-print(f"Best parameters: {best_params}")
-print(f"Best validation score: {best_score:.4f}")
-```
-
-### Model Analysis & Interpretation
-
-```python
-# Analyze model predictions vs ground truth
-import matplotlib.pyplot as plt
-
-# Get detailed predictions for analysis
-waveforms, labels = load_test_data('test_dataset.h5')
-windows, predictions = model.predict_windows(
-    waveforms, 
-    return_predictions=True
+    batch_size=64,
+    loss='bce+dice',        # Combined loss (options: 'dice', 'bce', 'amper', 'amperwdw', 'bce+dice')
+    lr=0.001,
+    val_split=0.2,
+    checkpoint_dir='checkpoints',  # Save training checkpoints
+    save_best=True,
+    verbose=True
 )
 
-# Visualize model activations
-fig, axes = plt.subplots(3, 1, figsize=(12, 8))
-
-# Raw waveform
-axes[0].plot(waveforms[0, :, 0])
-axes[0].set_title('Raw Waveform')
-
-# Model activations
-axes[1].plot(predictions[0, 0, :])
-axes[1].set_title('PAW Model Activations')
-
-# Ground truth vs prediction windows
-axes[2].axvspan(labels[0, 0]*40, labels[0, 1]*40, alpha=0.3, label='Ground Truth')
-axes[2].axvspan(windows[0, 0], windows[0, 1], alpha=0.3, label='Prediction')
-axes[2].plot(waveforms[0, :, 0])
-axes[2].set_title('Window Comparison')
-axes[2].legend()
-
-plt.tight_layout()
-plt.show()
+# Note: Advanced features like custom loss weights, learning rate scheduling, 
+# gradient clipping, and multi-GPU training may require additional configuration
+# or custom training loops not shown in this basic example.
 ```
 
-### Production Deployment
 
-```python
-# Optimize model for production inference
-model = PAW.from_pretrained('trained_model.pt')
+## ❓ Troubleshooting
 
-# Compile for faster inference (PyTorch 2.0+)
-model.model = torch.compile(model.model, mode='max-autotune')
+Having issues? Here are solutions to the most common problems:
 
-# Batch prediction for efficiency
-batch_waveforms = load_batch_data(batch_size=128)
-batch_windows = model.predict_windows(batch_waveforms)
+### 🚫 Installation Problems
 
-# Convert to deployment format
-results = {
-    'windows': batch_windows.tolist(),
-    'timestamps': [(w[0]/40.0, w[1]/40.0) for w in batch_windows],
-    'durations': [(w[1]-w[0])/40.0 for w in batch_windows]
-}
+#### **"ObsPy not found" or SAC file errors**
+```bash
+# Solution: Install ObsPy for SAC file support
+conda install obspy -c conda-forge
+# OR
+pip install obspy
 ```
 
-## 💡 API Reference
+#### **"PyTorch not found" or CUDA issues**
+```bash
+# Solution: Reinstall PyTorch with proper CUDA support
+# Check your CUDA version first:
+nvidia-smi
 
-### SAC File Loading
-
-```python
-from pawlib import load_sac_waveform, batch_load_sac_files
-
-# Load single file
-waveform, meta = load_sac_waveform('signal.sac', onset_time=10.5, window_duration=5.0, padding=0.5)
-
-# Batch load
-files = ['event1.sac', 'event2.sac', 'event3.sac']
-onsets = [10.5, 15.2, 8.7]
-waveforms, metadata = batch_load_sac_files(files, onsets)
+# Then install matching PyTorch version
+conda install pytorch torchvision pytorch-cuda=11.8 -c pytorch -c nvidia
+# Replace 11.8 with your CUDA version
 ```
 
-### Preprocessing
+#### **Import errors after installation**
+```bash
+# Solution: Reinstall in development mode
+cd pawlib
+pip install -e ".[dev]"
 
-```python
-from pawlib import preprocess_for_paw, normalize_waveform, filter_waveform, resample_waveform
-
-# Complete pipeline
-waveform = preprocess_for_paw(waveform, sampling_rate=20.0, target_freq=40.0, 
-                               freqmin=1.0, freqmax=15.0)
-
-# Individual operations
-waveform = filter_waveform(waveform, sampling_rate=20.0, freqmin=1.0, freqmax=15.0)
-waveform = resample_waveform(waveform, original_freq=20.0, target_freq=40.0)
-waveform = normalize_waveform(waveform, method='max')
+# Or try a fresh environment
+conda create -n pawlib-fresh python=3.10
+conda activate pawlib-fresh
+# Then follow installation steps again
 ```
 
-### Model Operations
+### 🐳 Container Problems
+
+#### **"Permission denied" with Docker**
+```bash
+# Solution 1: Use Podman instead (recommended)
+podman build -t pawlib:latest .
+
+# Solution 2: Add yourself to docker group (requires logout/login)
+sudo usermod -aG docker $USER
+
+# Solution 3: Use sudo (not recommended)
+sudo docker build -t pawlib:latest .
+```
+
+#### **Container build fails**
+```bash
+# Check disk space (needs ~2GB)
+df -h
+
+# Clean up old containers and images
+podman system prune -a
+
+# Try building with verbose output to see where it fails
+podman build -t pawlib:latest . --progress=plain
+```
+
+#### **SELinux permission issues (RHEL/Fedora)**
+```bash
+# Make sure to use :Z flag in volume mounts
+podman run --rm -v $(pwd)/data:/data:Z pawlib:latest [command]
+
+# If still having issues, check SELinux context
+ls -lZ data/
+```
+
+### 📊 Data and Analysis Problems
+
+#### **"Waveform shape is incorrect" errors**
+Your data needs to be exactly `(N, 200, 1)` shape at 40 Hz sampling rate.
 
 ```python
-# Load pretrained
-model = PAW.from_pretrained('hf://suroRitch/pawlib-pretrained/paw_corrected.pt')
+# Check your data shape
+print(f"Current shape: {waveform.shape}")
+print(f"Expected shape: (N, 200, 1)")
 
-# Inference
-predictions = model.predict(waveforms)  # Returns: (N, 1, T)
-windows = extract_windows_from_prediction(predictions)  # Returns: (N, 2)
+# Common fixes:
+# 1. If your data is 1D, add batch and channel dimensions
+waveform = waveform.reshape(1, -1, 1)
 
-# Training
+# 2. If wrong length, you may need to crop or pad
+# For 5-second window at 40Hz, you need exactly 200 samples
+target_length = 200
+if waveform.shape[1] != target_length:
+    print(f"Warning: adjusting length from {waveform.shape[1]} to {target_length}")
+```
+
+#### **"Model predictions look wrong"**
+```python
+# Check your data preprocessing
+from pawlib import preprocess_for_paw
+
+# Make sure you're preprocessing correctly
+waveform = preprocess_for_paw(waveform, sampling_rate=original_rate)
+
+# Verify the onset time is reasonable
+# Should be within your 5-second window (0-5 seconds)
+print(f"Onset time: {onset_time} seconds")
+print(f"Window covers: 0-5 seconds")
+```
+
+#### **"No GPU detected" but you have one**
+```python
+import torch
+
+# Check if CUDA is available
+print(f"CUDA available: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+    print(f"GPU name: {torch.cuda.get_device_name()}")
+    print(f"CUDA version: {torch.version.cuda}")
+else:
+    print("Running on CPU - install CUDA-compatible PyTorch for GPU acceleration")
+```
+
+### 📁 File and Path Issues
+
+#### **"File not found" errors**
+```bash
+# Always use absolute paths or verify current directory
+pwd
+ls -la data/
+
+# For containers, remember the mapping:
+# Your local path -> Container path
+# $(pwd)/data -> /data
+# $(pwd)/outputs -> /output
+```
+
+#### **SAC file won't load**
+```python
+# Test your SAC file with ObsPy directly
+from obspy import read
+try:
+    st = read('your_file.sac')
+    print(f"✅ SAC file loaded: {len(st)} traces")
+    print(f"   Duration: {st[0].stats.endtime - st[0].stats.starttime}s")
+    print(f"   Sample rate: {st[0].stats.sampling_rate}Hz")
+except Exception as e:
+    print(f"❌ SAC file error: {e}")
+```
+
+### � Memory and Performance Issues
+
+#### **"Out of memory" errors**
+```python
+# Reduce batch size
 model = PAW()
-history = model.train(data='dataset.h5', epochs=100, loss='dice')
-model.save('my_model.pt')
+# Instead of batch_size=64, try smaller:
+history = model.train(data='dataset.h5', batch_size=16)
+
+# For inference, process files one by one instead of batches
+for sac_file in sac_files:
+    result = process_single_file(sac_file)
+```
+
+#### **Slow processing**
+```bash
+# Enable GPU acceleration in containers
+podman run --rm --device nvidia.com/gpu=all [rest of command]
+
+# Check if you're using GPU
+python -c "import torch; print(f'Using: {torch.cuda.get_device_name()}' if torch.cuda.is_available() else 'CPU only')"
+```
+
+### 🆘 Getting More Help
+
+Still stuck? Try these debugging steps:
+
+1. **Check versions:**
+```python
+import pawlib, torch, obspy
+print(f"PAWlib: {pawlib.__version__}")  
+print(f"PyTorch: {torch.__version__}")
+print(f"ObsPy: {obspy.__version__}")
+```
+
+2. **Test with sample data:**
+```bash
+# Download known-good sample file
+curl -o test.sac https://examples.obspy.org/COP.BHZ.DK.2009.050
+
+# Test basic functionality
+python -c "from pawlib import PAW; model = PAW(); print('✅ Basic import works')"
+```
+
+3. **Enable verbose logging:**
+```python
+import logging
+logging.basicConfig(level=logging.DEBUG)
+# Now run your code - you'll see detailed output
 ```
 
 ---
 
-## 📝 Important Notes
+## 📚 Complete Examples
 
-### Data Format
-- **Input:** Waveforms shape `(N, T, 1)` - typically `(N, 200, 1)` at 40 Hz
-- **Labels:** `(N, 2)` containing `[start_time, end_time]` in seconds
-- **Padding:** Model requires 20 samples padding on each side (use `np.pad`)
-
-### Key Parameters
-- **Sampling rate:** 40 Hz (model requirement)
-- **Window duration:** 5 seconds (default)
-- **Loss functions:** `'dice'` (recommended), `'bce'`, `'amper'`, `'bce_dice'`
-
-## 📚 More Examples
-
-| File | Description | Key Features |
-|------|-------------|--------------|
-| `inference_demo.ipynb` | Interactive Jupyter notebook workflow | Half-cycle cropping, dual visualization, real data |
-| `examples/docker_predict.py` | Single file prediction (Docker-ready) | GPU support, automatic visualization |
-| `examples/docker_batch_predict.py` | Batch processing with CSV output | High-throughput processing |
-| `examples/quick_start.py` | Basic local usage example | Simple API demonstration |
-| `examples/high_level_api.py` | Advanced training example | Custom architectures, metrics |
-
-## 🐛 Common Issues
-
-1. **Missing ObsPy:** `pip install obspy` (required for SAC files)
-2. **GPU not detected:** Ensure CUDA drivers are installed
-3. **Import errors:** Reinstall with `pip install -e ".[dev]"` from repo root
-4. **Docker permission denied:** Use `podman` (rootless) or add user to docker group
+| File | Description | Use Case |
+|------|-------------|----------|
+| `inference_demo.ipynb` | Interactive Jupyter notebook | Learning and exploration |
+| `examples/docker_predict.py` | Single file prediction | Quick analysis |
+| `examples/docker_batch_predict.py` | Batch processing | Production workflows |
+| `examples/quick_start.py` | Basic Python usage | Integration testing |
 
 ## 📄 License
-
 Proprietary - Internal Use Only. See LICENSE file for details.
