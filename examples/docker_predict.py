@@ -70,8 +70,8 @@ def main():
     
     # Run prediction
     print("\nRunning inference...")
-    prediction = model.predict(waveform[:, 20:-20, :])
-    windows = extract_windows_from_prediction(prediction)
+    windows = model.predict_windows(waveform[:, 20:-20, :])
+    prediction = model.predict(waveform[:, 20:-20, :], return_windows=False)
     
     # Convert to time
     window_start_time = windows[0, 0] / 40.0

@@ -233,44 +233,84 @@ class PAW:
         
         return results
     
-    def predict(self, data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
+    def predict(self, data: Union[np.ndarray, torch.Tensor], return_windows: bool = False, 
+                apply_half_cycle_cropping: bool = True) -> np.ndarray:
         """Make predictions on new data.
         
         Args:
             data: Input waveforms (N, T, C) or (N, C, T)
+            return_windows: If True, return window boundaries (N, 2). If False, return masks (N, C, T)
+            apply_half_cycle_cropping: If True and return_windows=True, apply half-cycle cropping
             
         Returns:
-            predictions: Binary masks (N, C, T)
+            predictions: Binary masks (N, C, T) or window boundaries (N, 2)
         """
         self.model.eval()
         
-        # Add padding to match training preprocessing
         if isinstance(data, np.ndarray):
             padding_samples = 20
-            if data.ndim == 3:  # (N, T, C)
+            if data.ndim == 3:
                 n_samples, seq_len, n_channels = data.shape
                 padding_left = np.zeros((n_samples, padding_samples, n_channels))
                 padding_right = np.zeros((n_samples, padding_samples, n_channels))
                 data = np.concatenate([padding_left, data, padding_right], axis=1)
         
-        # Convert to tensor
         if isinstance(data, np.ndarray):
             data = torch.from_numpy(data).float()
         
-        # Ensure correct shape (N, C, T)
         if data.dim() == 2:
             data = data.unsqueeze(1)
-        if data.shape[1] > data.shape[2]:  # (N, T, C) -> (N, C, T)
+        if data.shape[1] > data.shape[2]:
             data = data.permute(0, 2, 1)
         
         data = data.to(self.device)
         
+        original_data = data.clone()
         with torch.no_grad():
             predictions = self.model(data)
             predictions = torch.sigmoid(predictions)
             predictions = self._normalize_predictions(predictions)
         
-        return predictions.cpu().numpy()
+        predictions_np = predictions.cpu().numpy()
+        
+        if not return_windows:
+            return predictions_np
+        
+        try:
+            from .preprocessing_utils import extract_windows_from_prediction
+        except ImportError:
+            raise ImportError("preprocessing_utils required for window extraction. Install with: pip install pawlib[dev]")
+        
+        windows = extract_windows_from_prediction(predictions_np)
+        
+        if apply_half_cycle_cropping and windows.shape[0] > 0:
+            windows_tensor = torch.from_numpy(windows).float().to(self.device)
+            signal_data = original_data[:, 0, :] if original_data.shape[1] == 1 else original_data[:, :, 0]
+            cropped_windows = self._limit_to_half_cycle(signal_data, windows_tensor)
+            windows = cropped_windows.cpu().numpy().astype(int)
+        
+        return windows
+    
+    def predict_windows(self, data: Union[np.ndarray, torch.Tensor], 
+                       apply_half_cycle_cropping: bool = True, 
+                       return_predictions: bool = False) -> Union[np.ndarray, tuple]:
+        """Predict amplitude windows with half-cycle cropping enabled by default.
+        
+        Args:
+            data: Input waveforms (N, T, C) or (N, C, T)
+            apply_half_cycle_cropping: Apply half-cycle cropping (default: True)
+            return_predictions: If True, also return raw model predictions (N, C, T)
+            
+        Returns:
+            windows: Window boundaries (N, 2) with half-cycle cropping applied by default
+            OR (if return_predictions=True): tuple of (windows, predictions)
+        """
+        if return_predictions:
+            predictions = self.predict(data, return_windows=False)
+            windows = self.predict(data, return_windows=True, apply_half_cycle_cropping=apply_half_cycle_cropping)
+            return windows, predictions
+        else:
+            return self.predict(data, return_windows=True, apply_half_cycle_cropping=apply_half_cycle_cropping)
     
     def save(self, path: str, metadata: Optional[Dict] = None):
         """Save model to file.
@@ -533,7 +573,10 @@ class PAW:
         return preds_norm
     
     def _limit_to_half_cycle(self, signals, windows):
-        """Crop predicted windows to exact half-cycle (matching main.py postprocessing).
+        """Crop predicted windows to best amplitude half-cycle using min/max subwindows.
+        
+        Finds local extrema, creates min→max and max→min subwindows, selects best by
+        amplitude (then duration, then position).
         
         Args:
             signals: (N, T) signal data
@@ -542,12 +585,11 @@ class PAW:
         Returns:
             Cropped windows
         """
-        batch_size = signals.shape[0]
         results = windows.clone()
         
-        for i in range(batch_size):
+        for i in range(signals.shape[0]):
             start, end = int(windows[i, 0]), int(windows[i, 1])
-            # Respect padding bounds
+            
             start = max(19, start)
             end = min(signals.shape[1] - 20, end)
             
@@ -555,30 +597,47 @@ class PAW:
                 continue
                 
             window_signal = signals[i, start:end+1]
+            window_length = end - start + 1
             
-            max_idx = torch.argmax(window_signal).item()
-            min_idx = torch.argmin(window_signal).item()
-            max_val = window_signal[max_idx].item()
-            min_val = window_signal[min_idx].item()
+            if window_length <= 4:
+                continue
             
-            # Find extremum (max or min with larger absolute value)
-            if abs(max_val) >= abs(min_val):
-                extremum_idx = max_idx
-                extremum_val = max_val
-            else:
-                extremum_idx = min_idx
-                extremum_val = min_val
+            extrema = [(0, window_signal[0].item()), (window_length-1, window_signal[-1].item())]
+            
+            for j in range(1, window_length - 1):
+                prev_val = window_signal[j-1].item()
+                curr_val = window_signal[j].item() 
+                next_val = window_signal[j+1].item()
                 
-            abs_extremum_idx = start + extremum_idx
+                if (curr_val > prev_val and curr_val > next_val) or (curr_val < prev_val and curr_val < next_val):
+                    extrema.append((j, curr_val))
             
-            # Choose half-cycle with larger amplitude
-            option_a_amp = abs(extremum_val - window_signal[0].item())
-            option_b_amp = abs(window_signal[-1].item() - extremum_val)
+            extrema.sort()
             
-            if option_a_amp >= option_b_amp:
-                results[i, 1] = min(abs_extremum_idx+1, end)
-            else:
-                results[i, 0] = max(abs_extremum_idx-1, start)
+            best_amplitude = 0
+            best_window = None
+            
+            for idx_start in range(len(extrema)):
+                for idx_end in range(idx_start + 1, len(extrema)):
+                    pos_start, val_start = extrema[idx_start]
+                    pos_end, val_end = extrema[idx_end]
+                    
+                    if (val_end > val_start) or (val_start > val_end):
+                        amplitude = abs(val_end - val_start)
+                        duration = pos_end - pos_start + 1
+                        
+                        if (amplitude > best_amplitude or 
+                            (amplitude == best_amplitude and best_window and 
+                             (duration > best_window[3] or 
+                              (duration == best_window[3] and pos_start < best_window[0])))):
+                            best_amplitude = amplitude
+                            best_window = (pos_start, pos_end, amplitude, duration)
+            
+            if best_window and best_window[3] >= 2:
+                new_start = start + best_window[0]
+                new_end = start + best_window[1]
+                results[i, 0] = new_start
+                results[i, 1] = new_end
         
         return results
     
@@ -586,7 +645,6 @@ class PAW:
         """Compute all evaluation metrics."""
         self.model.eval()
         
-        # Initialize metrics and move to device
         window_acc = WindowAccuracy().to(self.device)
         amp_rmse = AmplitudeRMSE(squared=False).to(self.device)
         per_rmse = PeriodRMSE(squared=False).to(self.device)
@@ -610,21 +668,16 @@ class PAW:
                 preds = torch.sigmoid(outputs)
                 preds = self._normalize_predictions(preds)
                 
-                # Convert labels to masks
                 masks = self._labels_to_masks(labels, data.shape[2])
                 
-                # Extract windows from predictions and targets
                 pred_windows = extract_windows_from_masks(preds)
                 target_windows = extract_windows_from_masks(masks)
                 
                 pred_windows = torch.from_numpy(pred_windows).to(self.device)
                 target_windows = torch.from_numpy(target_windows).to(self.device)
                 
-                # Apply half-cycle cropping
                 signal_data = data[:, 0, :] 
                 pred_windows = self._limit_to_half_cycle(signal_data, pred_windows)
-                
-                # Update metrics
                 window_acc.update(pred_windows, target_windows)
                 amp_rmse.update(data, pred_windows, target_windows)
                 per_rmse.update(pred_windows, target_windows)

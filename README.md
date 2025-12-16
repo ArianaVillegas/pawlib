@@ -11,9 +11,11 @@ A clean, production-ready PyTorch library for seismic phase arrival detection us
 
 **Table of Contents:**
 - [Quick Start (5 minutes)](#-quick-start-5-minutes)
-- [Installation](#-installation)
 - [Docker/Podman Usage](#-dockerpodman-usage)
+- [Jupyter Notebook Examples](#-jupyter-notebook-examples)
+- [Installation](#-installation)
 - [Python Usage Examples](#-python-usage-examples)
+- [Advanced Training & Testing](#-advanced-training--testing)
 - [API Reference](#-api-reference)
 - [Common Issues](#-common-issues)
 
@@ -36,7 +38,7 @@ podman build -t pawlib:latest .
 
 # 4. Run prediction with visualization
 mkdir -p outputs
-podman run --rm --device nvidia.com/gpu=all \
+podman run --rm \
   -v $(pwd)/data/sample_sac:/data:Z \
   -v $(pwd)/outputs:/output:Z \
   pawlib:latest python examples/docker_predict.py /data/COP_BHZ_DK.sac 200.0 /output/result.png
@@ -96,18 +98,43 @@ print(f"✅ pawlib installed! Model on {model.device}")
 
 ## 🐳 Docker/Podman Usage
 
-### Basic Prediction
+### Build Container Image
 ```bash
-# Using your own SAC files
+# Clone repository and build
+git clone git@github.com:ArianaVillegas/pawlib.git
+cd pawlib
+podman build -t pawlib:latest .
+```
+
+### Basic Prediction with Visualization
+```bash
+# Download sample data
+mkdir -p data/sample_sac outputs
+curl -o data/sample_sac/COP_BHZ_DK.sac https://examples.obspy.org/COP.BHZ.DK.2009.050
+
+# Run prediction with automatic half-cycle cropping
+podman run --rm \
+  -v $(pwd)/data/sample_sac:/data:Z \
+  -v $(pwd)/outputs:/output:Z \
+  pawlib:latest python examples/docker_predict.py /data/COP_BHZ_DK.sac 200.0 /output/result.png
+
+# View results
+open outputs/result.png  # or xdg-open on Linux
+```
+
+### GPU-Accelerated Processing
+```bash
+# With GPU support for faster inference
 podman run --rm --device nvidia.com/gpu=all \
   -v /path/to/your/sac/files:/data:Z \
-  pawlib:latest python examples/docker_predict.py /data/your_file.sac 10.5
+  -v $(pwd)/outputs:/output:Z \
+  pawlib:latest python examples/docker_predict.py /data/your_file.sac 10.5 /output/result.png
 ```
 
 ### Batch Processing
 ```bash
 # Process all SAC files in a directory
-podman run --rm --device nvidia.com/gpu=all \
+podman run --rm \
   -v /path/to/sac/files:/data:Z \
   -v $(pwd)/outputs:/output:Z \
   pawlib:latest python examples/docker_batch_predict.py /data /output/results.csv
@@ -115,20 +142,107 @@ podman run --rm --device nvidia.com/gpu=all \
 
 ### Docker Alternative
 ```bash
-# Replace 'podman' with 'docker' and adjust GPU flag
+# Using Docker instead of Podman
 docker run --rm --gpus all \
   -v /path/to/your/sac/files:/data \
-  pawlib:latest python examples/docker_predict.py /data/signal.sac 10.5
+  -v $(pwd)/outputs:/output \
+  pawlib:latest python examples/docker_predict.py /data/signal.sac 10.5 /output/result.png
+```
+
+## 📓 Jupyter Notebook Examples
+
+### Interactive Demo Notebook
+The `inference_demo.ipynb` provides a complete interactive workflow:
+
+```bash
+# Start Jupyter in the container
+podman run --rm -p 8888:8888 \
+  -v $(pwd):/workspace:Z \
+  pawlib:latest jupyter notebook --ip=0.0.0.0 --no-browser --allow-root
+
+# Or run locally after installation
+jupyter notebook inference_demo.ipynb
+```
+
+### Getting Both Predictions and Windows:
+```python
+# New feature: Get both raw predictions and refined windows
+refined_windows, predictions = model.predict_windows(
+    waveform[:, 20:-20, :], 
+    return_predictions=True
+)
+
+# predictions: Raw model activations (N, C, T) 
+# refined_windows: Half-cycle cropped boundaries (N, 2)
 ```
 
 ---
 
-## 🔍 Python Usage Examples
+## � Data Requirements & Preprocessing
 
-### Single SAC File Prediction
+**Important**: PAW models have specific data requirements. 
+
+### Required Data Format
+- **Sampling Rate**: 40 Hz (model requirement)
+- **Window Duration**: 5 seconds (200 samples at 40 Hz)
+- **Shape**: `(N, T, C)` where N=batch, T=time samples, C=channels
+- **Padding**: 20 samples on each side (handled automatically by model)
+- **Preprocessing**: Detrend → Filter (1-15 Hz) → Resample → Normalize
+
+### Docker Users (SAC Files): ✅ **Preprocessing Handled Automatically**
+When using Docker with SAC files, **all preprocessing is done automatically**:
+```bash
+# Docker automatically handles: detrend, filter, resample, normalize
+podman run --rm \
+  -v $(pwd)/data:/data:Z \
+  -v $(pwd)/outputs:/output:Z \
+  pawlib:latest python examples/docker_predict.py /data/signal.sac 10.5 /output/result.png
+```
+
+### Python Users: Manual Preprocessing Required
 
 ```python
-from pawlib import PAW, load_sac_waveform, preprocess_for_paw, extract_windows_from_prediction
+from pawlib import preprocess_for_paw, load_sac_waveform
+import numpy as np
+
+# 1. Load SAC file with proper windowing
+waveform, meta = load_sac_waveform('signal.sac', onset_time=10.5)
+
+# 2. Apply required preprocessing pipeline
+waveform = preprocess_for_paw(
+    waveform, 
+    sampling_rate=meta['sampling_rate'],  # Original rate (e.g., 20 Hz)
+    target_freq=40.0,                     # Required: 40 Hz
+    freqmin=1.0,                         # Required: 1-15 Hz filter
+    freqmax=15.0
+)
+
+# 3. Add required padding
+waveform = np.pad(waveform, ((0,0), (20,20), (0,0)), mode='constant')
+
+# 4. Ready for model inference
+model = PAW.from_pretrained('hf://suroRitch/pawlib-pretrained/paw_corrected.pt')
+windows = model.predict_windows(waveform[:, 20:-20, :])
+```
+
+### Individual Preprocessing Steps
+```python
+from pawlib import filter_waveform, resample_waveform, normalize_waveform
+
+# Step-by-step preprocessing for custom workflows
+waveform = filter_waveform(waveform, sampling_rate=20.0, freqmin=1.0, freqmax=15.0)
+waveform = resample_waveform(waveform, original_freq=20.0, target_freq=40.0)
+waveform = normalize_waveform(waveform, method='max')
+```
+
+---
+
+## �🔍 Python Usage Examples
+
+### Single SAC File Prediction with Half-Cycle Cropping
+
+```python
+from pawlib import PAW, load_sac_waveform, preprocess_for_paw
 import numpy as np
 
 # 1. Load SAC file (5-second window around onset)
@@ -138,28 +252,239 @@ waveform, meta = load_sac_waveform('signal.sac', onset_time=10.5)
 waveform = preprocess_for_paw(waveform, meta['sampling_rate'])
 waveform = np.pad(waveform, ((0,0), (20,20), (0,0)))  # Required padding
 
-# 3. Run inference
+# 3. Run inference with automatic half-cycle cropping
 model = PAW.from_pretrained('hf://suroRitch/pawlib-pretrained/paw_corrected.pt')
-prediction = model.predict(waveform[:, 20:-20, :])
-windows = extract_windows_from_prediction(prediction)
+windows = model.predict_windows(waveform[:, 20:-20, :])
 
 # 4. Get results
-start_time = windows[0, 0] / 40.0  # Convert to seconds
+start_time = windows[0, 0] / 40.0  # Convert to seconds  
 end_time = windows[0, 1] / 40.0
-print(f"Detected amplitude window: {start_time:.3f}s - {end_time:.3f}s")
+print(f"Detected half-cycle window: {start_time:.3f}s - {end_time:.3f}s")
+print(f"Duration: {end_time - start_time:.3f}s")
 ```
+
+### Getting Raw Predictions + Windows
+
+```python
+# Get both model activations and refined windows
+windows, predictions = model.predict_windows(
+    waveform[:, 20:-20, :],
+    return_predictions=True
+)
+
+# predictions: Raw PAW activations (N, C, T) for visualization
+# windows: Half-cycle cropped boundaries (N, 2) for analysis
+```
+
+## 🎓 Advanced Training & Testing
 
 ### Training Your Own Model
 
 ```python
-model = PAW()
+from pawlib import PAW
+
+# Initialize model with custom architecture
+model = PAW(
+    device='cuda',  # or 'cpu'
+    architecture='paw_reference',  # Model architecture
+)
+
+# Train with HDF5 dataset
 history = model.train(
-    data='dataset.h5',    # HDF5 file with 'waveforms' and 'labels'
+    data='dataset.h5',        # HDF5 file with 'waveforms' and 'labels'  
     epochs=100,
     batch_size=64,
-    loss='dice'          # Options: 'dice', 'bce', 'amper', 'bce_dice'
+    loss='dice',              # Options: 'dice', 'bce', 'amper', 'bce_dice'
+    learning_rate=0.001,
+    validation_split=0.2,
+    early_stopping=True,
+    patience=10
 )
-model.save('my_model.pt')
+
+# Save trained model
+model.save('my_model.pt', metadata={'version': '1.0', 'dataset': 'custom'})
+```
+
+### Custom Dataset Preparation
+
+```python
+import h5py
+import numpy as np
+
+# Create HDF5 dataset for training
+with h5py.File('dataset.h5', 'w') as f:
+    # Waveforms: (N, 200, 1) at 40 Hz, 5-second windows
+    f.create_dataset('waveforms', data=waveforms)  
+    
+    # Labels: (N, 2) with [start_time, end_time] in seconds
+    f.create_dataset('labels', data=labels)
+    
+    # Optional metadata
+    f.attrs['sampling_rate'] = 40.0
+    f.attrs['window_duration'] = 5.0
+```
+
+### Model Evaluation & Testing
+
+```python
+# Comprehensive model testing
+test_results = model.test(
+    data='test_dataset.h5',
+    batch_size=32,
+    apply_half_cycle_cropping=True
+)
+
+print(f"Window Accuracy: {test_results['window_accuracy']:.4f}")
+print(f"Amplitude RMSE: {test_results['amplitude_rmse']:.4f}")
+print(f"Period RMSE: {test_results['period_rmse']:.4f}")
+print(f"Dice Score: {test_results['dice_score']:.4f}")
+
+# Test on specific subsets
+subset_results = model.test_subsets(
+    data='test_dataset.h5',
+    subsets={
+        'high_snr': [0, 100, 200],      # Sample indices
+        'low_snr': [101, 201, 301],
+        'complex': [500, 600, 700]
+    }
+)
+```
+
+### Advanced Training Options
+
+```python
+# Custom loss functions and metrics
+from pawlib.losses import BCEDiceLoss, AmpPerLoss
+from pawlib.metrics import WindowAccuracy, AmplitudeRMSE
+
+model = PAW()
+
+# Multi-loss training with custom weights
+history = model.train(
+    data='dataset.h5',
+    epochs=100,
+    loss={
+        'dice': 0.7,        # 70% Dice loss weight
+        'bce': 0.2,         # 20% BCE loss weight  
+        'amper': 0.1        # 10% Amplitude-Period loss weight
+    },
+    scheduler='cosine',     # Learning rate scheduling
+    warmup_epochs=10,
+    gradient_clipping=1.0
+)
+```
+
+### Distributed Training
+
+```python
+# Multi-GPU training
+import torch.distributed as dist
+
+# Initialize distributed training
+model = PAW(device='cuda')
+
+# Train with DataParallel or DistributedDataParallel
+history = model.train(
+    data='large_dataset.h5',
+    epochs=200,
+    batch_size=128,
+    distributed=True,
+    world_size=4,           # Number of GPUs
+    rank=0                  # Current GPU rank
+)
+```
+
+### Hyperparameter Tuning
+
+```python
+from itertools import product
+
+# Grid search over hyperparameters
+param_grid = {
+    'learning_rate': [0.01, 0.001, 0.0001],
+    'batch_size': [32, 64, 128],
+    'loss': ['dice', 'bce_dice'],
+}
+
+best_score = 0
+best_params = {}
+
+for lr, bs, loss in product(*param_grid.values()):
+    model = PAW()
+    history = model.train(
+        data='train_dataset.h5',
+        validation_data='val_dataset.h5',
+        epochs=50,
+        learning_rate=lr,
+        batch_size=bs,
+        loss=loss,
+        verbose=False
+    )
+    
+    val_score = max(history['val_dice_score'])
+    if val_score > best_score:
+        best_score = val_score
+        best_params = {'lr': lr, 'batch_size': bs, 'loss': loss}
+        model.save(f'best_model_{val_score:.4f}.pt')
+
+print(f"Best parameters: {best_params}")
+print(f"Best validation score: {best_score:.4f}")
+```
+
+### Model Analysis & Interpretation
+
+```python
+# Analyze model predictions vs ground truth
+import matplotlib.pyplot as plt
+
+# Get detailed predictions for analysis
+waveforms, labels = load_test_data('test_dataset.h5')
+windows, predictions = model.predict_windows(
+    waveforms, 
+    return_predictions=True
+)
+
+# Visualize model activations
+fig, axes = plt.subplots(3, 1, figsize=(12, 8))
+
+# Raw waveform
+axes[0].plot(waveforms[0, :, 0])
+axes[0].set_title('Raw Waveform')
+
+# Model activations
+axes[1].plot(predictions[0, 0, :])
+axes[1].set_title('PAW Model Activations')
+
+# Ground truth vs prediction windows
+axes[2].axvspan(labels[0, 0]*40, labels[0, 1]*40, alpha=0.3, label='Ground Truth')
+axes[2].axvspan(windows[0, 0], windows[0, 1], alpha=0.3, label='Prediction')
+axes[2].plot(waveforms[0, :, 0])
+axes[2].set_title('Window Comparison')
+axes[2].legend()
+
+plt.tight_layout()
+plt.show()
+```
+
+### Production Deployment
+
+```python
+# Optimize model for production inference
+model = PAW.from_pretrained('trained_model.pt')
+
+# Compile for faster inference (PyTorch 2.0+)
+model.model = torch.compile(model.model, mode='max-autotune')
+
+# Batch prediction for efficiency
+batch_waveforms = load_batch_data(batch_size=128)
+batch_windows = model.predict_windows(batch_waveforms)
+
+# Convert to deployment format
+results = {
+    'windows': batch_windows.tolist(),
+    'timestamps': [(w[0]/40.0, w[1]/40.0) for w in batch_windows],
+    'durations': [(w[1]-w[0])/40.0 for w in batch_windows]
+}
 ```
 
 ## 💡 API Reference
@@ -225,12 +550,13 @@ model.save('my_model.pt')
 
 ## 📚 More Examples
 
-| File | Description |
-|------|-------------|
-| `inference_demo.ipynb` | Interactive Jupyter notebook workflow |
-| `examples/docker_predict.py` | Single file prediction (Docker-ready) |
-| `examples/docker_batch_predict.py` | Batch processing with CSV output |
-| `examples/download_sample_sac.py` | Download real seismic data samples |
+| File | Description | Key Features |
+|------|-------------|--------------|
+| `inference_demo.ipynb` | Interactive Jupyter notebook workflow | Half-cycle cropping, dual visualization, real data |
+| `examples/docker_predict.py` | Single file prediction (Docker-ready) | GPU support, automatic visualization |
+| `examples/docker_batch_predict.py` | Batch processing with CSV output | High-throughput processing |
+| `examples/quick_start.py` | Basic local usage example | Simple API demonstration |
+| `examples/high_level_api.py` | Advanced training example | Custom architectures, metrics |
 
 ## 🐛 Common Issues
 
