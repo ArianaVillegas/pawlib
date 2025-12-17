@@ -16,6 +16,10 @@ except ImportError:
 
 def get_onset_time_from_sac(trace) -> Optional[float]:
     """Extract onset/pick time from SAC header."""
+    # Check if SAC header exists
+    if not hasattr(trace.stats, 'sac'):
+        return None
+    
     sac = trace.stats.sac
     # Check t0 (manual picks) and 'a' (first arrival). -12345.0 is SAC undefined value
     for field in ['t0', 'a']:

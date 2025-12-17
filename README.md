@@ -188,6 +188,13 @@ with h5py.File('my_training_data.h5', 'w') as f:
 - **Labels**: Shape `(N, 2)` with `[start_time, end_time]` in seconds
 - **Preprocessing**: Data must be filtered (1-15 Hz), normalized, and resampled to 40 Hz
 
+### Paper Dataset
+Download dataset from [here](https://huggingface.co/datasets/suroRitch/PAW/tree/main) and place it in the root directory of this project.
+
+The dataset consists of 80,648 waveforms. The `dataset.h5` file contains two keys:
+- `waveforms`: A numpy array with a shape of (80648, 200, 1) representing the waveforms.
+- `labels`: A numpy array with a shape of (80648, 2) containing labels (start time, end time relative to a 5 second window) associated with the waveforms.
+
 ### Preprocessing Your Data
 ```python
 from pawlib import preprocess_for_paw

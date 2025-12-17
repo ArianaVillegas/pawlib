@@ -48,13 +48,29 @@ def main():
         print(f"\n[{i}/{len(sac_files)}] Processing: {sac_file.name}")
         
         try:
-            # Load and preprocess
-            waveform, meta = load_sac_waveform(
-                str(sac_file),
-                onset_time=None,  # Will try to read from SAC header
-                window_duration=5.0,
-                padding=0.5
-            )
+            # Try to load with onset from header first
+            try:
+                waveform, meta = load_sac_waveform(
+                    str(sac_file),
+                    onset_time=None,  # Will try to read from SAC header
+                    window_duration=5.0,
+                    padding=0.5
+                )
+            except ValueError as ve:
+                # If no onset in header, use middle of trace as default
+                from obspy import read
+                stream = read(str(sac_file))
+                trace = stream[0]
+                duration = len(trace.data) / trace.stats.sampling_rate
+                default_onset = min(10.5, duration / 2)
+                print(f"  Warning: No onset in SAC header, using default: {default_onset:.1f}s")
+                
+                waveform, meta = load_sac_waveform(
+                    str(sac_file),
+                    onset_time=default_onset,
+                    window_duration=5.0,
+                    padding=0.5
+                )
             
             waveform = preprocess_for_paw(
                 waveform,
@@ -90,7 +106,10 @@ def main():
             print(f"  ✓ Detected window: [{window_start:.3f}s, {window_end:.3f}s] (duration: {duration:.3f}s)")
             
         except Exception as e:
-            print(f"  ✗ Error: {e}")
+            import traceback
+            error_details = f"{type(e).__name__}: {e}"
+            print(f"  ✗ Error: {error_details}")
+            print(f"  Traceback: {traceback.format_exc()}")
             results.append({
                 'filename': sac_file.name,
                 'station': '',
@@ -100,7 +119,7 @@ def main():
                 'window_end': '',
                 'duration': '',
                 'max_probability': '',
-                'status': f'error: {e}'
+                'status': f'error: {error_details}'
             })
     
     # Save results to CSV
