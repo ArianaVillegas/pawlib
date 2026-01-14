@@ -8,7 +8,6 @@ import numpy as np
 import sys
 from pathlib import Path
 
-# Add pawlib to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from pawlib import PAW
@@ -49,7 +48,6 @@ def example_basic_usage():
     print(f"\nData shape: {data.shape}")
     print(f"Labels shape: {labels.shape}")
     
-    # Train model
     print("\nTraining model...")
     history = model.train(
         data=data,
@@ -62,11 +60,9 @@ def example_basic_usage():
         verbose=True
     )
     
-    # Test model
     print("\nTesting model...")
     results = model.test(data[:100], labels[:100], batch_size=32)
     
-    # Print results
     model.print_results(results, title="Test Results")
     
     return model
@@ -81,7 +77,6 @@ def example_h5_training():
     h5_path = "../datasets/dataset.h5"
     
     try:
-        # Create model
         model = PAW()
         
         # Train directly from H5 file
@@ -95,14 +90,11 @@ def example_h5_training():
             verbose=True
         )
         
-        # Test
         results = model.test(h5_path, batch_size=64)
         model.print_results(results)
         
-        # Save model
         model.save("checkpoints_demo/paw_demo.pt")
         
-        # Load model
         model2 = PAW.from_pretrained("checkpoints_demo/paw_demo.pt")
         
         return model
@@ -186,19 +178,6 @@ def main():
     example_h5_training()
     example_different_losses()
     example_prediction()
-    
-    print("\n" + "=" * 60)
-    print("All examples completed successfully!")
-    print("=" * 60)
-    print("\nThe high-level API provides:")
-    print("  ✓ Simple model.train() and model.test()")
-    print("  ✓ Multiple loss functions")
-    print("  ✓ Automatic data loading from H5 files")
-    print("  ✓ Comprehensive metrics")
-    print("  ✓ Easy save/load")
-    print("  ✓ Pretty printing")
-    print("\nReady for production use! 🚀\n")
-
 
 if __name__ == "__main__":
     main()
